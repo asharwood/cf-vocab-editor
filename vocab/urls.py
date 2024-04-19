@@ -2,6 +2,7 @@
 from django.urls import re_path 
 from vocab.views import *
 from django.contrib import admin
+from django.views.generic.base import RedirectView
 
 urlpatterns = [
      re_path(r'^admin/', admin.site.urls),
@@ -17,5 +18,9 @@ urlpatterns = [
      re_path(r'^term/(?P<id>\d+)', viewterm),
      re_path(r'^termhistory/(?P<id>\d+)', viewtermhistory),
      re_path(r'^phraselist/$', viewphraselist),
-               ]
+     
+     re_path(r'^$', RedirectView.as_view(url='/proposals/1', permanent=True), name='index')
+	      
+	      
+	       ]
 
