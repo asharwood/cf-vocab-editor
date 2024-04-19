@@ -464,6 +464,8 @@ def viewphraselist(request):
     return render(request, 'vocab/view_phrase_list.html', context)
 
 
+def health(request):
+    return render(request, 'vocab/health.html')
 
 
 #def viewvocablistversiondiff(request, id):

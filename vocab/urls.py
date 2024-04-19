@@ -18,7 +18,8 @@ urlpatterns = [
      re_path(r'^term/(?P<id>\d+)', viewterm),
      re_path(r'^termhistory/(?P<id>\d+)', viewtermhistory),
      re_path(r'^phraselist/$', viewphraselist),
-     
+
+     re_path(r'^health/$', health),     
      re_path(r'^$', RedirectView.as_view(url='/proposals/1', permanent=True), name='index')
 	      
 	      
