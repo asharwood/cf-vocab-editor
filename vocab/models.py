@@ -3,6 +3,14 @@ from django.db import models
 import datetime
 import random
 import re
+from django.utils.safestring import mark_safe
+
+# make a convertion table for smart quotes etc.
+intab =  b'\221\222\223\224\225\226\227\240'
+outtab = b'\047\047\042\042\052\055\055\040'
+
+convert_smart_quotes_table = bytes.maketrans(intab, outtab)
+
 
 
 class Term(models.Model):
@@ -17,6 +25,12 @@ class Term(models.Model):
 
     def __str__(self):
         return "Term: %s" % (self.name,) 
+
+   def save(self, *args, **kwargs):
+        # overload save to get ride of smart quotes
+        if type(self.description) == str:
+            self.description = self.description.translate(convert_smart_quotes_table)
+        models.Model.save(self, *args, **kwargs)
         
     def phrases(self):
         pp = []
@@ -53,9 +67,8 @@ class Term(models.Model):
         out = ''
         for p in props:
             if p.proposer: out += '<a href="/proposal/%s/edit">%s (%s)</a> ' % (p.id,p.id,p.proposer)
-            else: out += '<a href="/proposal/%s/edit">%s</a></span> ' % (p.id,p.id)
-        return out
-    proposals_links.allow_tags=True
+            else: out += '<a href="/proposal/%s/edit">%s</a>' % (p.id,p.id)
+        return mark_safe(out)
 
     def vocab_list_versions(self):
         vlvs = VocabListVersion.objects.filter(terms=self)
@@ -415,14 +428,14 @@ class Proposal(models.Model):
                     term_on_list=True
                     break
             if not term_on_list: 
-                print ("remove %s" % pt.term)
+                print("remove %s" % pt.term)
                 pt.term.delete()
 
             # remove proposed terms links
-            print ("remove %s" % pt)
+            print("remove %s" % pt)
             pt.delete()  
             # remove proposal - self
-        print ("remove %s" % self)
+        print("remove %s" % self)
         self.delete()            
 
 
@@ -443,6 +456,12 @@ class Phrase(models.Model):
 
     def __str__(self):
         return "%s" % (self.text,) 
+
+    def save(self, *args, **kwargs):
+        # overload save to get ride of smart quotes
+        if type(self.text) == str:
+            self.text = self.text.translate(convert_smart_quotes_table)
+        models.Model.save(self, *args, **kwargs)
 
     def isMatch(self, term):
         """

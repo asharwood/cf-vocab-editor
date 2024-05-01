@@ -7,6 +7,7 @@ from datetime import datetime
 from urllib.request import urlopen
 import re
 import csv
+import io
 
 def viewproposal_list(request, id):
     if request.user.is_authenticated: user=request.user
@@ -141,94 +142,139 @@ def bulkupload(request, vocab_id):
     print ("+++", upload)
 
     # upload is deefined so run processing of upload
-    reader = csv.reader(upload)
-    message = ''
-    header = True
-    proposer = None
-    proposed_date = None
-    thread_url = None
-    thread_title = None
+	
+    with io.TextIOWrapper(request.FILES["upload"], encoding="utf-8", newline='\n') as text_file:
+        reader = csv.reader(text_file)
+ 	
+        message = ''
+        header = True
+        proposer = None
+        proposed_date = None
+        thread_url = None
+        thread_title = None
 
-    for row in reader:
-        #message += ', '.join(row) + '\n'
+        for row in reader:
+            #message += ', '.join(row) + '\n'
 
-        # blank line ends the proposal header
-        # check we have proposer, proposed date, thread information
-        if not row[0].strip() and header:
-            header = False
-            if not proposer:
-                message += "Error: No proposer set\n"
-            if not proposed_date: message += "Error: No proposded date set\n"
-            if not thread_url: message += "Error: No thread_url set\n"
-            if not thread_title: message += "Error: No thread_title set\n"
-            # if propsal info not full set then stop
-            if not (proposer and proposed_date and thread_url and thread_title):
-                context.update({'message': message})
-                return render(request, 'vocab/bulkupload_output.txt', context=context, content_type='text/plain')
-            else:
-                message += "Proposal Info\n=============\n"
-                message += "proposer: %s\n" % proposer
-                message += "proposed_date: %s\n" % proposed_date
-                message += "thread_url: %s\n" % thread_url
-                message += "thread_title: %s\n\n\n" % thread_title
-                message += "Adding names\n============\n"
+            # blank line ends the proposal header
+            # check we have proposer, proposed date, thread information
+            if not row[0].strip() and header:
+                header = False
+                if not proposer:
+                    message += "Error: No proposer set\n"
+                if not proposed_date: message += "Error: No proposded date set\n"
+                if not thread_url: message += "Error: No thread_url set\n"
+                if not thread_title: message += "Error: No thread_title set\n"
+                # if propsal info not full set then stop
+                if not (proposer and proposed_date and thread_url and thread_title):
+                    context.update({'message': message})
+                    return render(request, 'vocab/bulkupload_output.txt', context=context, content_type='text/plain')
+                else:
+                    message += "Proposal Info\n=============\n"
+                    message += "proposer: %s\n" % proposer
+                    message += "proposed_date: %s\n" % proposed_date
+                    message += "thread_url: %s\n" % thread_url
+                    message += "thread_title: %s\n\n\n" % thread_title
+                    message += "Adding names\n============\n"
 
-        # read key value pairs for header
-        if header:
-            if row[0].strip() == 'proposer': proposer = row[1].strip()
-            if row[0].strip() == 'proposed_date': proposed_date = row[1].strip()
-            if row[0].strip() == 'thread_url': thread_url = row[1].strip()
-            if row[0].strip() == 'thread_title': thread_title = row[1].strip()
+            # read key value pairs for header
+            if header:
+                if row[0].strip() == 'proposer': proposer = row[1].strip()
+                if row[0].strip() == 'proposed_date': proposed_date = row[1].strip()
+                if row[0].strip() == 'thread_url': thread_url = row[1].strip()
+                if row[0].strip() == 'thread_title': thread_title = row[1].strip()
 
-        # name, unit, definition
-        if not header:
-            # skip blank lines
-            if row[0].strip() == '':
-                continue
-            # if there in only a name and not a unit then write and error and skip
-            if len(row) > 1 and row[1] == '':
-                message += "Error: No unit for %s\n" % row[0]
-                continue
-            if len(row) == 2:
-                termname, unit, unitref, definition = row[0].strip(), row[1].strip(), '', ''
-            elif len(row) == 3:
-                termname, unit, unitref, definition = row[0].strip(), row[1].strip(), row[2].strip(), ''
-            else:
-                termname, unit, unitref, definition = row[0].strip(), row[1].strip(), row[2].strip(), row[3].strip()
+            # name, unit, definition
+            if not header:
+                # skip blank lines
+                if row[0].strip() == '':
+                    continue
+                # if there in only a name and not a unit then write and error and skip
+                if len(row) > 1 and row[1] == '':
+                    message += "Error: No unit for %s\n" % row[0]
+                    continue
+                if len(row) == 2:
+                    termname, unit, unitref, definition = row[0].strip(), row[1].strip(), '', ''
+                elif len(row) == 3:
+                    termname, unit, unitref, definition = row[0].strip(), row[1].strip(), row[2].strip(), ''
+                else:
+                    termname, unit, unitref, definition = row[0].strip(), row[1].strip(), row[2].strip(), row[3].strip()
 
-            # if the definition is 'GETDEF' then insert phases
-            if definition == 'GETDEF':
-                definition = ''
-                for p in Phrase.objects.all():
-                    text = p.isMatch(termname)
-                    if text != '':
-                        definition += " " + text
+                # if the definition is 'GETDEF' then insert phases
+                if definition == 'GETDEF':
+                    definition = ''
+                    for p in Phrase.objects.all():
+                        text = p.isMatch(termname)
+                        if text != '':
+                            definition += " " + text
 
-            # check not existing already - only new terms
-            if len(Term.objects.filter(name=termname)) != 0:
-                message += "Error: can't make a duplicate %s\n" % termname
-                continue
+                # check not existing already - only new terms
+                if len(Term.objects.filter(name=termname)) != 0:
+                    message += "Error: can't make a duplicate %s\n" % termname
+                    continue
 
-            # add info to db
-            try:
-                p = Proposal(status='new', proposer=proposer, proposed_date=proposed_date,
-                             comment='Created by bulk upload', mail_list_url=thread_url,
-                             mail_list_title=thread_title, vocab_list=vocab)
-                p.save()
-                t = Term(name=termname, description=definition, unit=unit, unit_ref=unitref)
-                t.save()
-                pt = ProposedTerms(proposal=p, term=t)
-                pt.save()
-            except Exception as e:
-                print (e)
-                message += "Error: Could not make term and/or proposal objects in db. %s\n" % termname
-                continue
+                # add info to db
+                try:
+                    p = Proposal(status='new', proposer=proposer, proposed_date=proposed_date,
+                                 comment='Created by bulk upload', mail_list_url=thread_url,
+                                 mail_list_title=thread_title, vocab_list=vocab)
+                    p.save()
+                    t = Term(name=termname, description=definition, unit=unit, unit_ref=unitref)
+                    t.save()
+                    pt = ProposedTerms(proposal=p, term=t)
+                    pt.save()
+                except Exception as e:
+                    print (e)
+                    message += "Error: Could not make term and/or proposal objects in db. %s\n" % termname
+                    continue
 
-            message += "Success: Added %s\n" % termname
+                message += "Success: Added %s\n" % termname
 
     context.update({'message': message})
     return render(request, 'vocab/bulkupload_output.txt', context=context, content_type='text/plain')
 
+def bulkupload_phrases(request):
+    context = {}
+    context.update(csrf(request))
+
+    # bulk upload from a csv file
+    if 'upload' in request.FILES:
+        upload = request.FILES['upload']
+    else:
+        return render(request, 'vocab/bulkupload_phrases_form.html', context)
+
+    # upload is deefined so run processing of upload
+    with io.TextIOWrapper(request.FILES["upload"], encoding="utf-8", newline='\n') as text_file:
+        reader = csv.reader(text_file)
+        message = ''
+
+        for row in reader:
+    
+            # lines of form: regex, definition
+            # skip blank lines
+            if row[0].strip() == '':
+                continue
+            # if there in only a regex then skip.
+            if len(row) > 1 and row[1] == '':
+                message += "Error: No definition %s\n" % row[0]
+                continue
+
+            regex = row[0].strip()
+            text = row[1].strip()
+
+            # add info to db
+            try:
+                p = Phrase(regex=regex, text=text)
+                p.save()
+            except Exception as e:
+                print(e)
+                message += "Error: Could not make phrase objects in db. %s\n" % regex
+                continue
+
+            message += "Success: Added %s\n" % regex
+
+    context.update({'message': message})
+    return render(request, 'vocab/bulkupload_output.txt', context=context, content_type='text/plain')
 
 def scrapproposal(request, proposal_id):
     proposal = Proposal.objects.get(pk=proposal_id)
